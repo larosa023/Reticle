@@ -1,0 +1,3 @@
+Signed PawnIO modules from the official repository (namazso/PawnIO.Modules, release 0.2.11),
+unmodified, as shipped by LibreHardwareMonitor. Licensed under the LGPL-2.1 (see COPYING).
+PawnIO checks their signature before running them.
