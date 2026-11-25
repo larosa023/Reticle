@@ -1,8 +1,10 @@
-## Reticle 0.1.2
+## Reticle 0.1.3
 
-- **Fixed:** whole numbers on the overlay (FPS, 1% and 0.1% lows, CPU and GPU %, temperatures, GB totals) always showed **0**. Frame capture was working; the numbers were printed wrong. Every release is now checked with a screenshot of the overlay over a running test game.
-- **Fixed:** ordinary apps were being treated as games. 0.1.1 counted any big window that kept drawing for a few seconds, so apps like video players and launchers got the overlay. Now a game has to be in a game library folder, or fill the screen (borderless/fullscreen) and keep rendering, or be one you marked as a game.
-- Launchers (Minecraft Launcher and other apps with "Launcher" in the name) are no longer treated as games. The game they start still is.
-- Apps that 0.1.0/0.1.1 wrongly saved as games are cleared once. Real games are found again the next time you play.
-- The tray menu has "*App* isn't a game" for anything Reticle gets wrong.
-- More video and music apps are ignored (Stream Tube, FreeTube, Plex, Jellyfin, Kodi, Netflix, Spotify-style players and others).
+**You pick which apps get the overlay.**
+
+- Everything Reticle thinks is a game is listed on the **Games** page, each with its own **Overlay** and **Crosshair** switches.
+- Newly found games start with the overlay **off**. The first time Reticle finds one, it shows a short note in the corner, for example "Minecraft found · Alt+Shift+O shows the overlay here". Press the shortcut and that game keeps the overlay from then on. To go back to automatic, turn on **Overlay → Turn the overlay on for newly found games**.
+- **Games → Add a running app** lists your open app windows so you can pick one, even if Reticle didn't think it was a game. **Add .exe…** is still there too.
+- The tray menu has **Overlay in *Game*** and ***App* isn't a game** for whatever is in front.
+- Clicking **Restart to update** now installs right away, even if Reticle thinks a game is open. Automatic updates still wait until no game is running.
+- Update checks now ask GitHub directly when Hangar's release list is out of date, so new versions show up right away.

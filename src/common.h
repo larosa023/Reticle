@@ -18,7 +18,7 @@
 #include <cstdint>
 
 #ifndef RETICLE_VERSION
-#define RETICLE_VERSION L"0.1.2"
+#define RETICLE_VERSION L"0.1.3"
 #endif
 #define RETICLE_REPO_OWNER L"larosa023"
 #define RETICLE_REPO_NAME L"Reticle"
