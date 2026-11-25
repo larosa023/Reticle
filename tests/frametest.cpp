@@ -151,6 +151,6 @@ int wmain(int argc, wchar_t** argv) {
 
 #endif
 #ifdef FAKEGAME
-// fakegame.exe: a windowed "game" with no console, rendering with D3D11 for 25 seconds
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) { return RenderD3D11(25); }
+// fakegame.exe: a windowed "game" with no console, rendering with D3D11 for 70 seconds
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) { return RenderD3D11(70); }
 #endif

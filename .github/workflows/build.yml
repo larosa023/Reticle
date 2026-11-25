@@ -82,6 +82,19 @@ jobs:
           if (-not (Get-Process Reticle -ErrorAction SilentlyContinue)) { throw "Reticle exited" }
           if (-not ($log -match 'game: .*testgame.exe')) { throw "Reticle didn't detect the game" }
           if (-not ($log -match 'frames: testgame.exe at')) { throw "Reticle detected the game but got no FPS" }
+          # alt-tab away for longer than the 20 s capture timeout, then come back: FPS must return
+          $np = Start-Process notepad -PassThru
+          Start-Sleep -Seconds 26
+          $gp = Get-Process TestGame
+          $sh = New-Object -ComObject WScript.Shell
+          $null = $sh.AppActivate($gp.Id)
+          Start-Sleep -Seconds 6
+          Stop-Process $np -ErrorAction SilentlyContinue
+          $log = Get-Content "$env:LOCALAPPDATA\Reticle\reticle.log"
+          "---- after alt-tab ----"
+          $log
+          $frames = @($log | Select-String 'frames: testgame.exe at').Count
+          if ($frames -lt 2) { throw "FPS didn't come back after alt-tabbing back into the game" }
           Start-Process -FilePath dist\Reticle.exe -ArgumentList '--quit' -Wait
           Start-Sleep -Seconds 3
           if (Get-Process Reticle -ErrorAction SilentlyContinue) { throw "--quit didn't close Reticle" }

@@ -214,6 +214,7 @@ static void EndSession() {
 static void BecomeGame(const games::Window& w, const wchar_t* why) {
     RefreshCapture();   // capture stops 20 s after a game loses focus; back in the game it must restart
     s_gameSince = GetTickCount64();
+    s_framesLogged = s_noFramesLogged = false;   // logged once each time the game comes to the front
     if (g_app.gamePid != w.pid) {
         if (g_app.gamePid) EndSession();
         g_app.gamePid = w.pid;
