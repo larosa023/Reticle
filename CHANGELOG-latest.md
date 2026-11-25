@@ -1,14 +1,11 @@
-## Reticle 0.1.0
+## Reticle 0.1.1
 
-The first release: a lightweight in-game performance overlay and crosshair, without injection.
+**FPS now works reliably in the overlay.**
 
-- **Overlay**: FPS, frame time with a live graph, 1% and 0.1% lows, CPU usage and temperature, GPU usage, temperature, clock, power and VRAM (NVIDIA), RAM, clock and session length. Each one can be turned on or off.
-- **Layouts**: full panel, compact line or FPS only. Pick a corner or drag it anywhere, and set the text size, opacity and colors. Each game remembers its own preset.
-- **Automatic**: shows only while a game is in front and hides when you alt-tab.
-- **Benchmarks**: record a run with a shortcut, then see average FPS, 1% and 0.1% lows and a frame-time graph. Runs are saved per game, and you can compare two of them or export a CSV.
-- **Crosshair**: dot, cross, circle, T or your own PNG, with size, gap, thickness, color, outline and opacity settings. You turn it on or off per game.
-- **Shortcuts**: Alt+Shift+O shows or hides the overlay, Alt+Shift+L cycles layouts, Alt+Shift+B starts or stops a benchmark, and Alt+Shift+X turns the crosshair on or off. You can change them all.
-- **Safe with anti-cheat**: frame data comes from Windows' ETW graphics events, the way PresentMon gets it. Reticle never touches the game process.
-- The 14 suite themes, accent colors and Hangar theme files. Tray icon, start with Windows, portable mode and a built-in updater with rollback.
-
-Works over borderless and windowed games. Exclusive fullscreen hides any overlay window.
+- **Fixed:** FPS stopped showing after you alt-tabbed out of a game for more than 20 seconds and came back. Frame capture now restarts every time a game comes to the front.
+- **Fixed:** without admin rights the overlay only showed a dash for FPS. Reticle now sets this up with a single Windows prompt (never while a game is running): it starts with admin rights at sign-in from then on, and any later launch, from Hangar or elsewhere, switches to the admin copy without another prompt.
+- Reticle now checks whether Windows actually allows frame capture, rather than just whether it's running as admin. A restricted admin token can't capture.
+- Games that render from a helper process in their own folder are followed automatically.
+- If an admin copy is already running, opening Reticle again goes to that copy instead of starting a second one.
+- `reticle.log` now records, per game, whether frames arrived, which makes "no FPS" reports easy to diagnose.
+- Every release is now tested on a real Windows machine: frame capture for D3D11 and D3D9, detecting a game and getting its FPS, alt-tabbing out and back in, and the switch to the admin copy.

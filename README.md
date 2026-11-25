@@ -41,12 +41,12 @@ Reticle **never injects into games and never hooks DirectX, Vulkan or OpenGL**. 
 
 | What | Needs | Why |
 |---|---|---|
-| FPS, frame times, lows, benchmarks | Admin **or** membership in *Performance Log Users* | Windows only lets these accounts start an ETW trace session. On Home, **Allow permanently** adds your account to the group with one UAC prompt, and after you sign out and back in Reticle never needs admin for this again. **Restart as administrator** works for the current session. |
+| FPS, frame times, lows, benchmarks | Admin rights | Windows only lets administrators start an ETW trace session. The first time Reticle starts without that permission (and no game is running), it asks **once** through Windows' UAC prompt. That sets Reticle to start with admin rights at sign-in through a scheduled task and adds your account to *Performance Log Users*. Every launch after that, including from Hangar or the Start menu, switches to the admin copy with no prompt. You can also do it from **Home → Allow**. |
 | CPU temperature | Admin and the free [PawnIO](https://github.com/namazso/PawnIO.Setup) driver | This is how Ember and LibreHardwareMonitor read it. Reticle includes PawnIO's signed AMD (Zen) and Intel modules, unmodified. |
 | GPU stats | An NVIDIA GPU and driver | They're read through NVML (`nvml.dll`, which comes with the driver). |
 | Everything else | Nothing | |
 
-Without permission the overlay still shows CPU, GPU, RAM and the rest (you can turn that off). Reticle runs as a normal app (`asInvoker`) and only asks for admin when you choose to.
+Without permission the overlay still shows CPU, GPU, RAM and the rest (you can turn that off). Reticle never asks while a game is running. `reticle.log` (in the data folder) records whether frames arrived for each game, which helps if FPS ever shows a dash.
 
 ## Light on resources
 
