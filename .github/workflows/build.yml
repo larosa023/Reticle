@@ -89,6 +89,13 @@ jobs:
           $g = [System.Drawing.Graphics]::FromImage($bmp)
           $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $bmp.Save("$env:GITHUB_WORKSPACE\overlay.png")
+          # the panel area (the fake game sits at 50,50), printed so it can be checked from the log
+          $crop = $bmp.Clone((New-Object System.Drawing.Rectangle 40, 60, 420, 340), $bmp.PixelFormat)
+          $ms = New-Object System.IO.MemoryStream
+          $crop.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+          "OVERLAY-PNG-BEGIN"
+          [Convert]::ToBase64String($ms.ToArray()) -split '(.{2000})' | Where-Object { $_ }
+          "OVERLAY-PNG-END"
           # alt-tab away for longer than the 20 s capture timeout, then come back: FPS must return
           $np = Start-Process notepad -PassThru
           Start-Sleep -Seconds 26
