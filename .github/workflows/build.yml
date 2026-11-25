@@ -99,6 +99,24 @@ jobs:
           Start-Sleep -Seconds 3
           if (Get-Process Reticle -ErrorAction SilentlyContinue) { throw "--quit didn't close Reticle" }
 
+      - name: A normal (non-admin) launch hands over to the admin copy without a prompt
+        shell: pwsh
+        run: |
+          Remove-Item "$env:LOCALAPPDATA\Reticle\reticle.log" -ErrorAction SilentlyContinue
+          $sid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+          $p = Start-Process -FilePath dist\Reticle.exe -ArgumentList "--setup-admin $sid" -Wait -PassThru
+          "setup-admin exit: $($p.ExitCode)"
+          schtasks /Query /TN "Reticle (larosa023)"
+          if ($LASTEXITCODE -ne 0) { throw "the admin startup task wasn't created" }
+          $exe = (Resolve-Path dist\Reticle.exe).Path
+          runas /trustlevel:0x20000 "`"$exe`" --tray"
+          Start-Sleep -Seconds 15
+          $log = Get-Content "$env:LOCALAPPDATA\Reticle\reticle.log"
+          $log
+          Start-Process -FilePath dist\Reticle.exe -ArgumentList '--quit' -Wait
+          if (-not ($log -match 'switching to the admin copy')) { throw "the normal copy didn't hand over" }
+          if (-not ($log -match 'starting .*, admin\)')) { throw "the admin copy didn't start" }
+
   # A release is published automatically when RETICLE_VERSION in src/common.h changes on main
   # (or when a v* tag is pushed). Versions with a "-" such as 0.2.0-beta.1 are pre-releases (Beta).
   release:
