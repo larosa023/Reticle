@@ -98,7 +98,7 @@ static float Scale() { return s_dpi / 96.0f; }
 // ---------------------------------------------------------------- formatting
 static std::wstring Num(double v, int decimals) {
     wchar_t b[32];
-    swprintf(b, 32, decimals ? L"%.*f" : L"%.0f", decimals, v);
+    swprintf(b, 32, L"%.*f", decimals, v);   // always pass the precision: "%.0f" with it read the int as the number
     return b;
 }
 static std::wstring Temp(float c, bool shortUnit) {

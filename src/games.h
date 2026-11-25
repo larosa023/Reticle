@@ -22,6 +22,7 @@ struct Window {
 bool Describe(HWND hwnd, Window& out);       // false for desktop/shell windows, our own, invisible or tiny ones
 bool Blocklisted(const std::wstring& exe);    // browsers, launchers, chat, editors, the shell…
 bool InGameLibrary(const std::wstring& path); // steamapps\common, Epic Games, XboxGames…
+bool IsLauncher(const Window& w);             // "Minecraft Launcher", "…Launcher.exe": not a game by itself
 std::wstring FriendlyName(const Window& w);
 bool ProcessAlive(DWORD pid);
 bool ClientRect(HWND hwnd, RECT& out, RECT* monitor, UINT* dpi);

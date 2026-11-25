@@ -273,7 +273,7 @@ static void OnForeground() {
     if (mode == Detect::Never || (mode == Detect::Auto && games::Blocklisted(w.exe))) { NotAGame(w.exe.c_str()); return; }
     if (mode == Detect::Always) { RefreshCapture(); BecomeGame(w, L"always"); return; }
     RefreshCapture();
-    if (games::InGameLibrary(w.path)) { BecomeGame(w, L"game library folder"); return; }
+    if (games::InGameLibrary(w.path) && !games::IsLauncher(w)) { BecomeGame(w, L"game library folder"); return; }
     // otherwise: is it rendering frames like a game?
     if (g_app.gameForeground) Log(L"game left the foreground: %ls", w.exe.c_str());
     g_app.gameForeground = false;
@@ -291,17 +291,16 @@ static void OnDetect() {
     ++s_detectChecks;
     bool capture = frames::GetStatus() == frames::Status::Running;
     double rate = capture ? frames::PresentRate(w.pid) : 0;
-    bool known = FindGame(w.exe) != nullptr;
+    // "known" means you confirmed it (Always) or played it for a while; one false detection doesn't stick
+    GameProfile* gp = FindGame(w.exe);
+    bool known = gp && (gp->detect == Detect::Always || gp->playSeconds >= 600);
     if (capture) {
-        // a fullscreen-sized window drawing 20+ frames a second for 2 seconds, a game we've seen before,
-        // or a big window that keeps rendering for 3 seconds
-        int cw = w.client.right - w.client.left, ch = w.client.bottom - w.client.top;
-        int mw = w.monitor.right - w.monitor.left, mh = w.monitor.bottom - w.monitor.top;
-        bool big = mw > 0 && mh > 0 && (double)cw * ch >= 0.6 * (double)mw * mh;
-        if (rate >= 20 && (w.coversMonitor || known || big)) ++s_detectHits; else s_detectHits = 0;
-        int need = (w.coversMonitor || known) ? 4 : 6;
+        // a borderless/fullscreen window drawing 20+ frames a second for 3 seconds, or a game you've played before
+        bool launcher = games::IsLauncher(w);
+        if (rate >= 20 && !launcher && (w.coversMonitor || known)) ++s_detectHits; else s_detectHits = 0;
+        int need = 6;
         if (s_detectHits >= need) { BecomeGame(w, L"rendering"); return; }
-    } else if (w.coversMonitor && s_detectChecks >= 2) {
+    } else if (w.coversMonitor && !games::IsLauncher(w) && s_detectChecks >= 2) {
         BecomeGame(w, L"fullscreen window");   // no frame data: borderless fullscreen is the best signal
         return;
     }
@@ -626,7 +625,7 @@ static void CheckPermissions() {
 }
 
 // ---------------------------------------------------------------- tray menu
-enum : UINT { CMD_SETTINGS = 100, CMD_OVERLAY, CMD_CROSSHAIR, CMD_BENCH, CMD_MOVE, CMD_UPDATE, CMD_QUIT, CMD_INSTALL };
+enum : UINT { CMD_SETTINGS = 100, CMD_OVERLAY, CMD_CROSSHAIR, CMD_BENCH, CMD_MOVE, CMD_UPDATE, CMD_QUIT, CMD_INSTALL, CMD_NOTGAME };
 
 static void TrayMenu() {
     HMENU m = CreatePopupMenu();
@@ -638,6 +637,7 @@ static void TrayMenu() {
                 (p ? L"Crosshair in " + p->name : std::wstring(L"Crosshair (start a game)")).c_str());
     AppendMenuW(m, MF_STRING | (g_app.gamePid ? 0 : MF_GRAYED), CMD_BENCH, g_app.benching ? L"Stop benchmark" : L"Start benchmark");
     AppendMenuW(m, MF_STRING, CMD_MOVE, L"Move overlay…");
+    if (p) AppendMenuW(m, MF_STRING, CMD_NOTGAME, (p->name + L" isn't a game").c_str());
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     if (g_app.upd.kind == SelfUpdateState::Ready) AppendMenuW(m, MF_STRING, CMD_INSTALL, (L"Restart to update to " + g_app.upd.version).c_str());
     else AppendMenuW(m, MF_STRING, CMD_UPDATE, L"Check for updates");
@@ -656,6 +656,9 @@ static void TrayMenu() {
         case CMD_UPDATE: CheckUpdates(true); OpenSettings(L"settings"); break;
         case CMD_INSTALL: TryInstall(true); break;
         case CMD_QUIT: Quit(); break;
+        case CMD_NOTGAME:
+            if (p) { p->detect = Detect::Never; ConfigSaveSoon(); EndSession(); ui::Invalidate(); }
+            break;
     }
 }
 

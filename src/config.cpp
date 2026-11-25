@@ -133,6 +133,16 @@ void ConfigLoad() {
             c.games[p.exe] = p;
         }
     }
+    // schema 1 (0.1.0/0.1.1) could save non-games after a few seconds of rendering: forget auto-detected
+    // entries you haven't customized or played for long; real games are found again the next time
+    if (v.GetNum(L"schema", 1) < 2) {
+        for (auto it = c.games.begin(); it != c.games.end();) {
+            const GameProfile& p = it->second;
+            bool keep = p.detect != Detect::Auto || p.ownStyle || p.playSeconds >= 600 || !p.overlay || p.crosshair;
+            if (!keep) Log(L"settings: forgetting auto-detected %ls", p.exe.c_str());
+            it = keep ? std::next(it) : c.games.erase(it);
+        }
+    }
     c.benchSeconds = Clamp<int>(v.GetNum(L"benchSeconds", c.benchSeconds), 0, 600);
     if (const json::Value* h = v.Get(L"hotkeys"); h && h->type == json::Value::Object) {
         const wchar_t* names[HkCount] = {L"", L"toggle", L"layout", L"benchmark", L"crosshair"};
@@ -159,7 +169,7 @@ void ConfigLoad() {
 
 void ConfigSave() {
     json::Value v = json::Value::MakeObject();
-    v.Set(L"schema", json::Value::Num(1));
+    v.Set(L"schema", json::Value::Num(2));
     v.Set(L"theme", json::Value::Str(g_cfg.theme));
     v.Set(L"accent", json::Value::Str(g_cfg.accent));
     v.Set(L"overlayOn", json::Value::Boolean(g_cfg.overlayOn));

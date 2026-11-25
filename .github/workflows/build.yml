@@ -82,6 +82,13 @@ jobs:
           if (-not (Get-Process Reticle -ErrorAction SilentlyContinue)) { throw "Reticle exited" }
           if (-not ($log -match 'game: .*testgame.exe')) { throw "Reticle didn't detect the game" }
           if (-not ($log -match 'frames: testgame.exe at')) { throw "Reticle detected the game but got no FPS" }
+          # a screenshot of the overlay over the game, kept as a build artifact
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$env:GITHUB_WORKSPACE\overlay.png")
           # alt-tab away for longer than the 20 s capture timeout, then come back: FPS must return
           $np = Start-Process notepad -PassThru
           Start-Sleep -Seconds 26
@@ -98,6 +105,13 @@ jobs:
           Start-Process -FilePath dist\Reticle.exe -ArgumentList '--quit' -Wait
           Start-Sleep -Seconds 3
           if (Get-Process Reticle -ErrorAction SilentlyContinue) { throw "--quit didn't close Reticle" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: overlay-screenshot
+          path: overlay.png
+          if-no-files-found: ignore
 
       - name: A normal (non-admin) launch hands over to the admin copy without a prompt
         shell: pwsh

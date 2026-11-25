@@ -3,6 +3,7 @@
 #include "util.h"
 #include <shellapi.h>
 #include <algorithm>
+#include <map>
 
 namespace games {
 
@@ -24,7 +25,9 @@ static const wchar_t* kBlock[] = {
     L"discord.exe", L"discordptb.exe", L"discordcanary.exe", L"vesktop.exe", L"spotify.exe", L"teams.exe", L"ms-teams.exe", L"slack.exe",
     L"zoom.exe", L"outlook.exe", L"olk.exe", L"winword.exe", L"excel.exe", L"powerpnt.exe", L"onenote.exe", L"code.exe", L"cursor.exe",
     L"devenv.exe", L"rider64.exe", L"idea64.exe", L"notepad++.exe", L"obs64.exe", L"obs32.exe", L"vlc.exe", L"mpc-hc64.exe", L"mpc-be64.exe",
-    L"mpv.exe", L"potplayermini64.exe", L"wmplayer.exe", L"music.ui.exe", L"video.ui.exe", L"claude.exe", L"chatgpt.exe",
+    L"mpv.exe", L"potplayermini64.exe", L"streamtube.exe", L"freetube.exe", L"plex.exe", L"plexamp.exe", L"jellyfin.exe", L"jellyfinmediaplayer.exe",
+    L"kodi.exe", L"netflix.exe", L"disneyplus.exe", L"primevideo.exe", L"twitch.exe", L"tidal.exe", L"applemusic.exe", L"itunes.exe", L"musicbee.exe",
+    L"foobar2000.exe", L"aimp.exe", L"stremio.exe", L"crunchyroll.exe", L"wmplayer.exe", L"music.ui.exe", L"video.ui.exe", L"claude.exe", L"chatgpt.exe",
     L"blender.exe", L"photoshop.exe", L"afterfx.exe", L"premiere.exe", L"resolve.exe", L"figma.exe", L"whatsapp.exe", L"telegram.exe",
     // overlays, tools, wallpapers
     L"msiafterburner.exe", L"rtss.exe", L"nvcontainer.exe", L"nvidia app.exe", L"nvidia overlay.exe", L"wallpaper32.exe", L"wallpaper64.exe",
@@ -49,6 +52,17 @@ bool InGameLibrary(const std::wstring& path) {
     std::wstring p = Lower(path);
     for (auto* d : kDirs) if (p.find(d) != std::wstring::npos) return true;
     return false;
+}
+
+bool IsLauncher(const Window& w) {
+    static std::map<std::wstring, bool> cache;
+    auto it = cache.find(w.path);
+    if (it != cache.end()) return it->second;
+    std::wstring company, product, desc;
+    ExeStrings(w.path, company, product, desc);
+    bool l = IContains(w.exe, L"launcher") || IContains(product, L"Launcher") || IContains(desc, L"Launcher") || IContains(w.title, L"Launcher");
+    cache[w.path] = l;
+    return l;
 }
 
 bool ClientRect(HWND hwnd, RECT& out, RECT* monitor, UINT* dpi) {
