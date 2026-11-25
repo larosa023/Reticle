@@ -45,6 +45,7 @@ jobs:
             dist/Reticle-win-x64.zip
             dist/SHA256SUMS.txt
             dist/frametest.exe
+            dist/fakegame.exe
 
   # Real Windows: frame capture must see a D3D11 (and D3D9) renderer's frames, and Reticle.exe must start.
   test:
@@ -71,10 +72,10 @@ jobs:
           # a fake game in a Steam library folder, rendering with D3D11
           $game = "$env:RUNNER_TEMP\SteamLibrary\steamapps\common\TestGame"
           New-Item -ItemType Directory -Force $game | Out-Null
-          Copy-Item dist\frametest.exe "$game\TestGame.exe"
+          Copy-Item dist\fakegame.exe "$game\TestGame.exe"
           Start-Process -FilePath dist\Reticle.exe -ArgumentList '--tray'
           Start-Sleep -Seconds 4
-          Start-Process -FilePath "$game\TestGame.exe" -ArgumentList '--d3d11','20'
+          Start-Process -FilePath "$game\TestGame.exe"
           Start-Sleep -Seconds 14
           $log = Get-Content "$env:LOCALAPPDATA\Reticle\reticle.log"
           $log

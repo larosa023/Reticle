@@ -9,4 +9,7 @@ mkdir -p dist
 $ZIG c++ -target x86_64-windows-gnu -std=c++17 -O2 -municode -DUNICODE -D_UNICODE -DNOMINMAX -DWIN32_LEAN_AND_MEAN \
   tests/frametest.cpp src/frames.cpp src/util.cpp -o dist/frametest.exe \
   -ld3d11 -ld3d9 -ldxgi -ladvapi32 -lshell32 -lole32 -luuid -lbcrypt -lversion -lshlwapi -luser32
-rm -f dist/frametest.pdb
+$ZIG c++ -target x86_64-windows-gnu -std=c++17 -O2 -municode -DFAKEGAME -DUNICODE -D_UNICODE -DNOMINMAX -DWIN32_LEAN_AND_MEAN \
+  tests/frametest.cpp src/frames.cpp src/util.cpp -o dist/fakegame.exe -Wl,--subsystem,windows \
+  -ld3d11 -ld3d9 -ldxgi -ladvapi32 -lshell32 -lole32 -luuid -lbcrypt -lversion -lshlwapi -luser32
+rm -f dist/frametest.pdb dist/fakegame.pdb

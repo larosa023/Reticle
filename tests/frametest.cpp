@@ -132,6 +132,7 @@ static bool Measure(const wchar_t* arg, const char* name, bool required) {
     return ok || !required;
 }
 
+#ifndef FAKEGAME
 int wmain(int argc, wchar_t** argv) {
     if (argc > 1 && !wcscmp(argv[1], L"--d3d11")) return RenderD3D11(argc > 2 ? _wtoi(argv[2]) : 8);
     if (argc > 1 && !wcscmp(argv[1], L"--d3d9")) return RenderD3D9(8);
@@ -147,3 +148,9 @@ int wmain(int argc, wchar_t** argv) {
     printf(ok ? "ALL PASS\n" : "FAILED\n");
     return ok ? 0 : 1;
 }
+
+#endif
+#ifdef FAKEGAME
+// fakegame.exe: a windowed "game" with no console, rendering with D3D11 for 25 seconds
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) { return RenderD3D11(25); }
+#endif
