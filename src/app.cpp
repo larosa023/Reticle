@@ -240,7 +240,8 @@ static void BecomeGame(const games::Window& w, const wchar_t* why) {
     ui::Invalidate();
 }
 
-static void NotAGame() {
+static void NotAGame(const wchar_t* why = L"") {
+    if (g_app.gameForeground) Log(L"game left the foreground: %ls", why);
     g_app.gameForeground = false;
     KillTimer(g_app.ctl, TIMER_DETECT);
     StopTimers();
@@ -254,20 +255,26 @@ static void OnForeground() {
     HWND fg = GetForegroundWindow();
     if (!fg) return;
     if (fg == ui::Hwnd() || fg == g_app.ctl) {   // our own Settings: keep the session, hide the overlay
-        if (g_app.gameForeground) NotAGame();
+        if (g_app.gameForeground) NotAGame(L"Reticle's own window");
         return;
     }
     games::Window w;
-    if (!games::Describe(fg, w)) { NotAGame(); return; }
+    if (!games::Describe(fg, w)) {
+        wchar_t cls[64] = {};
+        GetClassNameW(fg, cls, 64);
+        NotAGame(cls);
+        return;
+    }
     // the same game again (alt-tab back)
     if (w.pid == g_app.gamePid) { BecomeGame(w, L"refocused"); return; }
     GameProfile* p = FindGame(w.exe);
     Detect mode = p ? p->detect : Detect::Auto;
-    if (mode == Detect::Never || (mode == Detect::Auto && games::Blocklisted(w.exe))) { NotAGame(); return; }
+    if (mode == Detect::Never || (mode == Detect::Auto && games::Blocklisted(w.exe))) { NotAGame(w.exe.c_str()); return; }
     if (mode == Detect::Always) { RefreshCapture(); BecomeGame(w, L"always"); return; }
     RefreshCapture();
     if (games::InGameLibrary(w.path)) { BecomeGame(w, L"game library folder"); return; }
     // otherwise: is it rendering frames like a game?
+    if (g_app.gameForeground) Log(L"game left the foreground: %ls", w.exe.c_str());
     g_app.gameForeground = false;
     overlay::Hide();
     overlay::HideCrosshair();
@@ -302,7 +309,7 @@ static void OnDetect() {
 
 static void OnTick() {
     if (!g_app.gameForeground) { KillTimer(g_app.ctl, TIMER_TICK); return; }
-    if (!IsWindow(g_app.game.hwnd)) { NotAGame(); return; }
+    if (!IsWindow(g_app.game.hwnd)) { NotAGame(L"window closed"); return; }
     frames::Snapshot(g_app.live, 240);
     // one line per session in reticle.log, so "no FPS" reports can be diagnosed
     if (g_app.live.valid && !s_framesLogged) {
