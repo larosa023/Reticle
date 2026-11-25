@@ -54,6 +54,7 @@ struct Frame { int64_t qpc; float ms; };
 static std::mutex s_lock;
 static std::atomic<Status> s_status{Status::Off};
 static std::atomic<DWORD> s_error{0};
+static std::atomic<int> s_allowed{-1};
 static TRACEHANDLE s_session = 0;
 static TRACEHANDLE s_trace = INVALID_PROCESSTRACE_HANDLE;
 static std::thread s_thread;
@@ -78,6 +79,7 @@ static std::unordered_map<DWORD, Rate> s_rates;
 
 Status GetStatus() { return s_status; }
 DWORD LastError() { return s_error; }
+int Allowed() { return s_allowed; }
 
 static void OnPresent(DWORD pid, int src, int64_t qpc) {
     std::lock_guard<std::mutex> g(s_lock);
@@ -209,6 +211,7 @@ bool Start() {
         s_session = 0;
         s_error = st;
         s_status = st == ERROR_ACCESS_DENIED ? Status::NoPermission : Status::Failed;
+        if (st == ERROR_ACCESS_DENIED) s_allowed = 0;
         Log(L"frame capture: StartTrace failed (%lu)", st);
         return false;
     }
@@ -245,6 +248,7 @@ bool Start() {
     });
     s_status = Status::Running;
     s_error = 0;
+    s_allowed = 1;
     Log(L"frame capture: started");
     return true;
 }

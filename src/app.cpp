@@ -579,15 +579,23 @@ static void HandOverToAdmin() {
     if (settingsOpen) ui::Open(L"home");
 }
 
+// Can this copy start a trace session? (Being "elevated" isn't enough: a restricted admin token can't.)
+static bool CaptureAllowed() {
+    if (frames::GetStatus() == frames::Status::Running) return true;
+    bool ok = frames::Start();
+    if (ok && !g_app.gameForeground && !g_app.benching) frames::Stop();   // only a probe: nothing runs while idle
+    return ok;
+}
+
 void FixPermissions(bool userAsked) {
-    if (sys::IsElevated() || sys::InPerfLogUsers()) return;
+    if (CaptureAllowed()) { ui::Invalidate(); return; }
     if (GameRunning()) {
         // never prompt while a game is running; try again later
         if (userAsked) overlay::Toast(L"Close the game first");
         SetTimer(g_app.ctl, TIMER_PERMISSION, 60 * 1000, nullptr);
         return;
     }
-    if (sys::StartupIsAdmin()) { HandOverToAdmin(); return; }   // set up already: no prompt needed
+    if (sys::StartupIsAdmin() && !s_handedOver) { HandOverToAdmin(); return; }   // set up already: no prompt needed
     if (!userAsked) { ++g_cfg.permissionAsks; ConfigSave(); }
     Log(L"asking Windows for frame-capture permission (%ls)", userAsked ? L"from Settings" : L"automatic");
     if (!sys::SetupAdmin()) {
@@ -603,12 +611,15 @@ void FixPermissions(bool userAsked) {
 }
 
 static void CheckPermissions() {
-    if (sys::IsElevated()) {
-        // already admin: make sure sign-in starts it that way too
-        if (g_cfg.startWithWindows && !sys::StartupIsAdmin()) { std::wstring e; sys::SetStartup(true, true, &e); }
+    bool ok = CaptureAllowed();
+    Log(L"frame capture permission: %ls (admin %d)", ok ? L"yes" : L"no", sys::IsElevated() ? 1 : 0);
+    if (ok) {
+        // allowed as admin: make sure sign-in starts it that way too
+        if (sys::IsElevated() && !sys::InPerfLogUsers() && g_cfg.startWithWindows && !sys::StartupIsAdmin()) { std::wstring e; sys::SetStartup(true, true, &e); }
+        ui::Invalidate();
         return;
     }
-    if (sys::InPerfLogUsers()) return;
+    if (frames::GetStatus() != frames::Status::NoPermission) return;   // some other failure: logged by frames
     if (!s_handedOver && sys::StartupIsAdmin()) { HandOverToAdmin(); return; }
     if (s_handedOver || g_cfg.permissionAsks >= 2) return;   // the Home page explains what to do
     FixPermissions(false);

@@ -19,6 +19,7 @@ bool Start();                       // starts the session (idempotent); false if
 void Stop();
 Status GetStatus();
 DWORD LastError();
+int Allowed();                      // 1: a session started before, 0: Windows refused (access denied), -1: not tried yet
 
 void SetTarget(DWORD pid);          // the process whose frames feed the overlay and benchmarks
 DWORD Target();

@@ -403,16 +403,19 @@ static void DrawSidebar() {
 }
 
 // ---------------------------------------------------------------- frame capture banner
+static bool CaptureNeedsPermission();
 static std::wstring CaptureStatusText() {
     switch (frames::GetStatus()) {
         case frames::Status::Running: return L"Frame capture is on";
         case frames::Status::NoPermission: return L"Frame capture needs permission";
         case frames::Status::Failed: return L"Frame capture couldn't start (error " + std::to_wstring(frames::LastError()) + L")";
-        default: return sys::IsElevated() || sys::InPerfLogUsers() ? L"Frame capture starts when a game is in front" : L"Frame capture needs permission";
+        default: return !CaptureNeedsPermission() ? L"Frame capture starts when a game is in front" : L"Frame capture needs permission";
     }
 }
 
 static bool CaptureNeedsPermission() {
+    int a = frames::Allowed();
+    if (a >= 0) return a == 0;
     return !sys::IsElevated() && !sys::InPerfLogUsers();
 }
 
@@ -502,7 +505,7 @@ static void DrawHome() {
     if (p) Toggle(q.right - 18, q.top + 64 + 21, p->crosshair, K("qcross"), [] { if (GameProfile* g = FindGame(g_app.game.exe)) { g->crosshair = !g->crosshair; ConfigSaveSoon(); app::CrosshairChanged(); } Invalidate(); });
     else ButtonR(q.right - 18, q.top + 64 + 16, L"Design", 0xE710, Btn::Secondary, K("qcrossd"), [] { Navigate(Page::Crosshair); });
     Divider(q.top + 128);
-    RowLabel(q.top + 128, CaptureStatusText(), sys::IsElevated() ? L"Running as administrator" : sys::InPerfLogUsers() ? L"Allowed through Performance Log Users" : L"See the note above");
+    RowLabel(q.top + 128, CaptureStatusText(), CaptureNeedsPermission() ? L"See the note above" : sys::IsElevated() ? L"Running as administrator" : sys::InPerfLogUsers() ? L"Allowed through Performance Log Users" : L"See the note above");
     Pill(q.right - 18, q.top + 128 + 22, frames::GetStatus() == frames::Status::Running ? L"Active" : CaptureNeedsPermission() ? L"Needs permission" : L"Standing by",
          frames::GetStatus() == frames::Status::Running ? g_t.good : CaptureNeedsPermission() ? g_t.warn : g_t.info, true);
 

@@ -102,6 +102,7 @@ jobs:
       - name: A normal (non-admin) launch hands over to the admin copy without a prompt
         shell: pwsh
         run: |
+          Get-Process TestGame -ErrorAction SilentlyContinue | Stop-Process
           Remove-Item "$env:LOCALAPPDATA\Reticle\reticle.log" -ErrorAction SilentlyContinue
           $sid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
           $p = Start-Process -FilePath dist\Reticle.exe -ArgumentList "--setup-admin $sid" -Wait -PassThru
