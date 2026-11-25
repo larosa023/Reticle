@@ -509,8 +509,8 @@ void CheckUpdates(bool force) { updater::Check(g_app.ctl, force, g_cfg.autoUpdat
 
 static void TryInstall(bool userAsked) {
     if (g_app.upd.kind != SelfUpdateState::Ready) return;
-    if (GameRunning()) {
-        // never update while a game is running; try again once it closes
+    if (!userAsked && GameRunning()) {
+        // never update on its own while a game is running; try again once it closes (clicking the button still works)
         g_app.updateDeferredForGame = true;
         SetTimer(g_app.ctl, TIMER_INSTALL, 10 * 60 * 1000, nullptr);
         ui::Invalidate();

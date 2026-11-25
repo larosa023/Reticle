@@ -1430,7 +1430,7 @@ static void DrawSettings() {
         RowLabel(s3.top, std::wstring(L"Reticle ") + RETICLE_VERSION, status, 230);
         if (u.kind == SelfUpdateState::Ready || u.kind == SelfUpdateState::Available)
             ButtonR(s3.right - 18, s3.top + 16, u.kind == SelfUpdateState::Ready ? L"Restart to update" : L"Install", icon::Update, Btn::Primary, K("updnow"),
-                    [] { app::InstallUpdateNow(); Invalidate(); }, !app::GameRunning());
+                    [] { app::InstallUpdateNow(); Invalidate(); });
         else
             ButtonR(s3.right - 18, s3.top + 16, L"Check for updates now", icon::Refresh, Btn::Secondary, K("updcheck"), [] { app::CheckUpdates(true); Invalidate(); },
                     u.kind != SelfUpdateState::Checking && u.kind != SelfUpdateState::Downloading);
