@@ -65,7 +65,7 @@ static const Asset* FindAsset(const Release& r, const std::wstring& name) {
 
 // Hangar's release index (one file for the whole suite, refreshed every 10 minutes by a workflow)
 // keeps every app clear of GitHub's 60-requests-an-hour limit. The API is the fallback.
-static bool FromIndex(std::vector<Release>& out) {
+static bool FromIndex(std::vector<Release>& out, bool force) {
     net::Response r;
     std::wstring cache = CacheDir() + L"\\index.json", etagFile = CacheDir() + L"\\index.etag", etag;
     ReadTextFile(etagFile, etag);
@@ -77,7 +77,9 @@ static bool FromIndex(std::vector<Release>& out) {
     json::Value v;
     if (!json::Parser(Utf8ToWide(body)).Parse(v) || v.type != json::Value::Object) return false;
     long long generated = (long long)v.GetNum(L"generated", 0);
-    if (generated && (long long)time(nullptr) - generated > 24 * 3600) return false;
+    // the index refreshes about hourly in practice: a manual check or a stale index asks GitHub directly
+    long long age = generated ? (long long)time(nullptr) - generated : 0;
+    if (age > (force ? 10 * 60 : 45 * 60)) return false;
     const json::Value* repos = v.Get(L"repos");
     const json::Value* rels = repos ? repos->Get(L"larosa023/reticle") : nullptr;
     if (!rels || rels->type != json::Value::Array) return false;
@@ -110,7 +112,7 @@ void Check(HWND notify, bool force, bool download) {
         PostState(notify, SelfUpdateState::Checking);
         std::vector<Release> rels;
         std::wstring err;
-        if (!FromIndex(rels)) {
+        if (!FromIndex(rels, force)) {
             rels.clear();
             net::Response r;
             if (!net::Get(net::ApiBase() + L"/repos/larosa023/Reticle/releases?per_page=10", r, L"", true)) err = r.error;
