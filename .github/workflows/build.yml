@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
@@ -26,6 +26,9 @@ jobs:
       - name: Build Reticle.exe
         run: ./build.sh
 
+      - name: Build the frame capture test
+        run: ./tests/build-tests.sh
+
       - name: Package
         run: |
           cp README.md LICENSE dist/
@@ -39,13 +42,56 @@ jobs:
           name: Reticle-win-x64
           path: |
             dist/Reticle.exe
+            dist/Reticle-win-x64.zip
             dist/SHA256SUMS.txt
+            dist/frametest.exe
 
-      # A release is published automatically when RETICLE_VERSION in src/common.h changes on main
-      # (or when a v* tag is pushed). Versions with a "-" such as 0.2.0-beta.1 are pre-releases (Beta).
+  # Real Windows: frame capture must see a D3D11 (and D3D9) renderer's frames, and Reticle.exe must start.
+  test:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Reticle-win-x64
+          path: dist
+
+      - name: Frame capture (ETW)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\frametest.exe -NoNewWindow -Wait -PassThru -RedirectStandardOutput out.txt
+          Get-Content out.txt
+          if ($p.ExitCode -ne 0) { throw "frame capture test failed ($($p.ExitCode))" }
+
+      - name: Reticle starts
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\Reticle.exe -ArgumentList '--version' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "--version failed" }
+          Start-Process -FilePath dist\Reticle.exe -ArgumentList '--tray'
+          Start-Sleep -Seconds 8
+          if (-not (Get-Process Reticle -ErrorAction SilentlyContinue)) { Get-Content "$env:LOCALAPPDATA\Reticle\reticle.log"; throw "Reticle exited" }
+          Get-Content "$env:LOCALAPPDATA\Reticle\reticle.log"
+          Start-Process -FilePath dist\Reticle.exe -ArgumentList '--quit' -Wait
+          Start-Sleep -Seconds 3
+          if (Get-Process Reticle -ErrorAction SilentlyContinue) { throw "--quit didn't close Reticle" }
+
+  # A release is published automatically when RETICLE_VERSION in src/common.h changes on main
+  # (or when a v* tag is pushed). Versions with a "-" such as 0.2.0-beta.1 are pre-releases (Beta).
+  release:
+    needs: [build, test]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Reticle-win-x64
+          path: dist
+
       - name: Decide release
         id: rel
-        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
