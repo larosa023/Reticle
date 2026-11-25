@@ -24,6 +24,16 @@ static HWND MakeWindow(const wchar_t* title) {
     return h;
 }
 
+static void Front(HWND h) {
+    // make sure the "game" is the foreground window (CI desktops can be picky)
+    DWORD fg = GetWindowThreadProcessId(GetForegroundWindow(), nullptr), me = GetCurrentThreadId();
+    AttachThreadInput(fg, me, TRUE);
+    ShowWindow(h, SW_SHOWNORMAL);
+    SetForegroundWindow(h);
+    BringWindowToTop(h);
+    AttachThreadInput(fg, me, FALSE);
+}
+
 static void Pump() {
     MSG m;
     while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&m); DispatchMessageW(&m); }
@@ -31,6 +41,7 @@ static void Pump() {
 
 static int RenderD3D11(int seconds) {
     HWND hwnd = MakeWindow(L"frametest d3d11");
+    Front(hwnd);
     DXGI_SWAP_CHAIN_DESC sd{};
     sd.BufferCount = 2;
     sd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -122,7 +133,7 @@ static bool Measure(const wchar_t* arg, const char* name, bool required) {
 }
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc > 1 && !wcscmp(argv[1], L"--d3d11")) return RenderD3D11(8);
+    if (argc > 1 && !wcscmp(argv[1], L"--d3d11")) return RenderD3D11(argc > 2 ? _wtoi(argv[2]) : 8);
     if (argc > 1 && !wcscmp(argv[1], L"--d3d9")) return RenderD3D9(8);
     LogInit();
     if (!frames::Start()) {

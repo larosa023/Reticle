@@ -27,6 +27,7 @@ enum : UINT_PTR {
     TIMER_UPDATE,         // update checks (first after 30 s, then every 3 h)
     TIMER_HEALTHY,        // after an update: tell the old copy we're running
     TIMER_INSTALL,        // retries a downloaded update when it couldn't install (game running)
+    TIMER_PERMISSION,     // makes sure frame capture is allowed (a few seconds after start)
 };
 
 static NOTIFYICONDATAW s_nid{};
@@ -38,6 +39,9 @@ static DWORD s_detectPid = 0;
 static int s_detectHits = 0, s_detectChecks = 0;
 static ULONGLONG s_lastPlayTick = 0;
 static std::vector<float> s_sampleGraph;
+static bool s_handedOver = false;          // started by the admin task / an admin restart
+static ULONGLONG s_gameSince = 0, s_lastAltCheck = 0;
+static bool s_framesLogged = false, s_noFramesLogged = false;
 
 static void Notify(const std::wstring& title, const std::wstring& text) {
     // never while a game is running
@@ -208,10 +212,13 @@ static void EndSession() {
 }
 
 static void BecomeGame(const games::Window& w, const wchar_t* why) {
+    RefreshCapture();   // capture stops 20 s after a game loses focus; back in the game it must restart
+    s_gameSince = GetTickCount64();
     if (g_app.gamePid != w.pid) {
         if (g_app.gamePid) EndSession();
         g_app.gamePid = w.pid;
         g_app.sessionStart = GetTickCount64();
+        s_framesLogged = s_noFramesLogged = false;
         GameProfile& p = EnsureGame(w.exe, games::FriendlyName(w), w.path);
         g_app.gameName = p.name;
         Log(L"game: %ls (%ls, pid %lu, %ls)", p.name.c_str(), w.exe.c_str(), w.pid, why);
@@ -297,6 +304,38 @@ static void OnTick() {
     if (!g_app.gameForeground) { KillTimer(g_app.ctl, TIMER_TICK); return; }
     if (!IsWindow(g_app.game.hwnd)) { NotAGame(); return; }
     frames::Snapshot(g_app.live, 240);
+    // one line per session in reticle.log, so "no FPS" reports can be diagnosed
+    if (g_app.live.valid && !s_framesLogged) {
+        s_framesLogged = true;
+        Log(L"frames: %ls at %.0f fps (%ls, pid %lu)", g_app.game.exe.c_str(), g_app.live.fps, g_app.live.api, frames::Target());
+    } else if (!g_app.live.valid && !s_framesLogged && !s_noFramesLogged && GetTickCount64() - s_gameSince > 6000) {
+        s_noFramesLogged = true;
+        Log(L"frames: none from %ls after 6 s (capture %d, error %lu, admin %d)", g_app.game.exe.c_str(), (int)frames::GetStatus(), frames::LastError(),
+            sys::IsElevated() ? 1 : 0);
+    }
+    // No frames from the window's process? Some games render from a helper process (same folder).
+    ULONGLONG now = GetTickCount64();
+    if (!g_app.live.valid && frames::GetStatus() == frames::Status::Running && now - s_gameSince > 3000 && now - s_lastAltCheck > 2000) {
+        s_lastAltCheck = now;
+        std::wstring dir = Lower(g_app.game.path.substr(0, g_app.game.path.find_last_of(L'\\') + 1));
+        DWORD best = 0;
+        double bestRate = 10;
+        for (auto& pr : frames::ActiveProcesses()) {
+            if (pr.second < bestRate || pr.first == frames::Target()) continue;
+            std::wstring path;
+            if (HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pr.first)) {
+                wchar_t buf[MAX_PATH * 2];
+                DWORD n = MAX_PATH * 2;
+                if (QueryFullProcessImageNameW(h, 0, buf, &n)) path.assign(buf, n);
+                CloseHandle(h);
+            }
+            if (!dir.empty() && IStartsWith(Lower(path), dir)) { best = pr.first; bestRate = pr.second; }
+        }
+        if (best) {
+            Log(L"frames: %ls renders from pid %lu; following it", g_app.game.exe.c_str(), best);
+            frames::SetTarget(best);
+        }
+    }
     Render();
 }
 
@@ -511,6 +550,62 @@ void InstallUpdateNow() {
     else updater::Check(g_app.ctl, true, true);
 }
 
+// ---------------------------------------------------------------- frame capture permission
+static void HandOverToAdmin() {
+    Log(L"switching to the admin copy through the startup task");
+    ConfigFlush();
+    bool settingsOpen = ui::IsOpen();
+    if (settingsOpen) { WriteTextFileAtomic(DataDir() + L"\\restore.json", L"{\"settings\":true}"); ui::Close(); }
+    overlay::Hide();
+    overlay::HideCrosshair();
+    frames::Stop();
+    RemoveTray();
+    for (int i = 1; i < HkCount; ++i) UnregisterHotKey(g_app.ctl, i);
+    ReleaseInstanceMutex();
+    if (sys::RunAdminTask()) { Quit(); return; }
+    Log(L"couldn't start the admin task");
+    DeleteFileW((DataDir() + L"\\restore.json").c_str());
+    ReacquireInstanceMutex();
+    AddTray();
+    ApplyHotkeys();
+    if (settingsOpen) ui::Open(L"home");
+}
+
+void FixPermissions(bool userAsked) {
+    if (sys::IsElevated() || sys::InPerfLogUsers()) return;
+    if (GameRunning()) {
+        // never prompt while a game is running; try again later
+        if (userAsked) overlay::Toast(L"Close the game first");
+        SetTimer(g_app.ctl, TIMER_PERMISSION, 60 * 1000, nullptr);
+        return;
+    }
+    if (sys::StartupIsAdmin()) { HandOverToAdmin(); return; }   // set up already: no prompt needed
+    if (!userAsked) { ++g_cfg.permissionAsks; ConfigSave(); }
+    Log(L"asking Windows for frame-capture permission (%ls)", userAsked ? L"from Settings" : L"automatic");
+    if (!sys::SetupAdmin()) {
+        Log(L"permission setup declined or failed");
+        ui::Invalidate();
+        return;
+    }
+    g_cfg.startWithWindows = true;
+    std::wstring err;
+    sys::SetStartup(true, true, &err);   // the task replaces the Run entry
+    ConfigSave();
+    HandOverToAdmin();
+}
+
+static void CheckPermissions() {
+    if (sys::IsElevated()) {
+        // already admin: make sure sign-in starts it that way too
+        if (g_cfg.startWithWindows && !sys::StartupIsAdmin()) { std::wstring e; sys::SetStartup(true, true, &e); }
+        return;
+    }
+    if (sys::InPerfLogUsers()) return;
+    if (!s_handedOver && sys::StartupIsAdmin()) { HandOverToAdmin(); return; }
+    if (s_handedOver || g_cfg.permissionAsks >= 2) return;   // the Home page explains what to do
+    FixPermissions(false);
+}
+
 // ---------------------------------------------------------------- tray menu
 enum : UINT { CMD_SETTINGS = 100, CMD_OVERLAY, CMD_CROSSHAIR, CMD_BENCH, CMD_MOVE, CMD_UPDATE, CMD_QUIT, CMD_INSTALL };
 
@@ -609,6 +704,10 @@ static LRESULT CALLBACK CtlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     KillTimer(hwnd, TIMER_INSTALL);
                     TryInstall(false);
                     break;
+                case TIMER_PERMISSION:
+                    KillTimer(hwnd, TIMER_PERMISSION);
+                    CheckPermissions();
+                    break;
             }
             return 0;
         case WM_DISPLAYCHANGE:
@@ -643,8 +742,9 @@ static LRESULT CALLBACK CtlProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-HWND Create(HINSTANCE inst, bool openSettings, const updater::AfterUpdate& after) {
+HWND Create(HINSTANCE inst, bool openSettings, const updater::AfterUpdate& after, bool handedOver) {
     g_app.inst = inst;
+    s_handedOver = handedOver;
     s_after = after;
     if (!gfx::Init()) return nullptr;
     WNDCLASSEXW wc{sizeof(wc)};
@@ -678,9 +778,12 @@ HWND Create(HINSTANCE inst, bool openSettings, const updater::AfterUpdate& after
         ConfigSave();
         openSettings = true;
     }
-    if (after.active) {
+    {
         std::wstring p = DataDir() + L"\\restore.json", text;
         if (ReadTextFile(p, text)) { DeleteFileW(p.c_str()); if (text.find(L"\"settings\":true") != std::wstring::npos) openSettings = true; }
+    }
+    SetTimer(g_app.ctl, TIMER_PERMISSION, after.active ? 30000 : 3000, nullptr);
+    if (after.active) {
         SetTimer(g_app.ctl, TIMER_HEALTHY, 300, nullptr);
         Log(L"started after an update from %ls", after.fromVersion.c_str());
     }

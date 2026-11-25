@@ -30,6 +30,7 @@ static bool HasArg(const wchar_t* cmd, const wchar_t* arg) { return wcsstr(cmd, 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     if (HasArg(cmdLine, L"--version")) return 0;
     if (const wchar_t* g = wcsstr(cmdLine, L"--grant-perflog ")) return sys::HandleGrantPerfLog(g + 16);
+    if (const wchar_t* g = wcsstr(cmdLine, L"--setup-admin ")) { LogInit(); return sys::HandleSetupAdmin(g + 14); }
 
     if (HasArg(cmdLine, L"--quit")) {
         if (HWND w = FindWindowW(RETICLE_MAIN_CLASS, nullptr)) PostMessageW(w, WM_RETICLE_QUIT, 0, 0);
@@ -37,8 +38,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     }
 
     updater::AfterUpdate after = updater::ParseArgs(GetCommandLineW());
-    bool handover = after.active || HasArg(cmdLine, L"--elevated");
+    bool handover = after.active || HasArg(cmdLine, L"--elevated") || HasArg(cmdLine, L"--from-task");
     g_mutex = CreateMutexW(nullptr, TRUE, kMutexName);
+    // an admin copy's mutex can't be opened by a normal one: that also means "already running"
+    DWORD mutexErr = g_mutex ? GetLastError() : (GetLastError() == ERROR_ACCESS_DENIED ? ERROR_ALREADY_EXISTS : GetLastError());
+    SetLastError(mutexErr);
     if (GetLastError() == ERROR_ALREADY_EXISTS && handover) {
         // the copy we're replacing (an update, or the non-admin copy that restarted us) is letting go
         CloseHandle(g_mutex);
@@ -46,7 +50,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
         for (int i = 0; i < 80 && !g_mutex; ++i) {
             Sleep(100);
             HANDLE m = CreateMutexW(nullptr, TRUE, kMutexName);
-            if (GetLastError() != ERROR_ALREADY_EXISTS) g_mutex = m; else CloseHandle(m);
+            if (m && GetLastError() != ERROR_ALREADY_EXISTS) g_mutex = m; else if (m) CloseHandle(m);
         }
         if (!g_mutex) return 0;
     } else if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -71,7 +75,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     net::Init();
 
     bool openSettings = !HasArg(cmdLine, L"--tray") && !after.active;
-    if (!app::Create(inst, openSettings, after)) {
+    if (!app::Create(inst, openSettings, after, HasArg(cmdLine, L"--from-task") || HasArg(cmdLine, L"--elevated"))) {
         MessageBoxW(nullptr, L"Reticle couldn't start. Details are in reticle.log.", L"Reticle", MB_ICONERROR);
         return 1;
     }

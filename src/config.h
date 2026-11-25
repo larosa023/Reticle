@@ -99,6 +99,7 @@ struct Config {
     // app
     bool startWithWindows = true;
     bool firstRun = true;
+    int permissionAsks = 0;                // automatic frame-capture permission prompts so far (max 2)
     bool autoUpdate = true;
     bool beta = false;
     std::wstring skipVersion;

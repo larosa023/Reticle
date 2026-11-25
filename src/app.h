@@ -35,7 +35,8 @@ struct AppState {
 extern AppState g_app;
 
 namespace app {
-HWND Create(HINSTANCE inst, bool openSettings, const updater::AfterUpdate& after);
+HWND Create(HINSTANCE inst, bool openSettings, const updater::AfterUpdate& after, bool handedOver);
+void FixPermissions(bool userAsked);    // one UAC prompt: admin startup task + Performance Log Users, then switch to the admin copy
 void OpenSettings(const wchar_t* page = nullptr);
 void ApplyHotkeys();                    // re-register after Settings changes them
 void ThemeChanged();                    // recompute the overlay accent

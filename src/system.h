@@ -24,4 +24,10 @@ bool StartupIsAdmin();                     // cached; RefreshStartupState() re-r
 void RefreshStartupState();
 bool SetStartup(bool on, bool admin, std::wstring* error);
 
+// One UAC prompt that fixes frame capture for good: adds the account to Performance Log Users and
+// registers the admin startup task. Blocks until the prompt is answered; false if declined/failed.
+bool SetupAdmin();
+int HandleSetupAdmin(const wchar_t* sid);  // the elevated side (Reticle.exe --setup-admin <sid>)
+bool RunAdminTask();                       // starts the admin copy through the task (no prompt)
+
 } // namespace sys

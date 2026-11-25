@@ -145,6 +145,7 @@ void ConfigLoad() {
     }
     c.startWithWindows = v.GetBool(L"startWithWindows", c.startWithWindows);
     c.autoUpdate = v.GetBool(L"autoUpdate", c.autoUpdate);
+    c.permissionAsks = (int)v.GetNum(L"permissionAsks", 0);
     c.beta = v.GetBool(L"beta", c.beta);
     c.skipVersion = v.GetStr(L"skipVersion");
     if (const json::Value* w = v.Get(L"window"); w && w->type == json::Value::Object) {
@@ -212,6 +213,7 @@ void ConfigSave() {
     v.Set(L"hotkeys", hk);
     v.Set(L"startWithWindows", json::Value::Boolean(g_cfg.startWithWindows));
     v.Set(L"autoUpdate", json::Value::Boolean(g_cfg.autoUpdate));
+    v.Set(L"permissionAsks", json::Value::Num(g_cfg.permissionAsks));
     v.Set(L"beta", json::Value::Boolean(g_cfg.beta));
     v.Set(L"skipVersion", json::Value::Str(g_cfg.skipVersion));
     json::Value w = json::Value::MakeObject();

@@ -307,6 +307,20 @@ double PresentRate(DWORD pid) {
     return best;
 }
 
+std::vector<std::pair<DWORD, double>> ActiveProcesses() {
+    std::vector<DWORD> pids;
+    {
+        std::lock_guard<std::mutex> g(s_lock);
+        for (auto& kv : s_rates) pids.push_back(kv.first);
+    }
+    std::vector<std::pair<DWORD, double>> out;
+    for (DWORD p : pids) {
+        double r = PresentRate(p);
+        if (r > 0) out.push_back({p, r});
+    }
+    return out;
+}
+
 static double LowFps(std::vector<float>& sortedDesc, double fraction) {
     if (sortedDesc.empty()) return 0;
     size_t n = std::max<size_t>(1, (size_t)(sortedDesc.size() * fraction));

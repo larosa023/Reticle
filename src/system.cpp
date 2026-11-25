@@ -8,6 +8,12 @@
 
 namespace sys {
 
+static const wchar_t* kGrantKey = L"Software\\larosa023\\Reticle";
+static const wchar_t* kTask = L"Reticle (larosa023)";
+static std::wstring Schtasks() { return KnownFolder(FOLDERID_System) + L"\\schtasks.exe"; }
+static std::wstring UserSid();
+int HandleGrantPerfLog(const wchar_t* sidText);
+
 bool IsElevated() {
     HANDLE tok = nullptr;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) return false;
@@ -67,7 +73,6 @@ static bool RunElevated(const std::wstring& args, bool wait, DWORD* exitCode) {
 
 bool RestartElevated(const std::wstring& args) { return RunElevated(L"--elevated " + args, false, nullptr); }
 
-static const wchar_t* kGrantKey = L"Software\\larosa023\\Reticle";
 
 bool GrantPerfLogUsers() {
     std::wstring sid = UserSid();
@@ -106,7 +111,6 @@ int HandleGrantPerfLog(const wchar_t* sidText) {
 
 // ---------------------------------------------------------------- startup
 static const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-static const wchar_t* kTask = L"Reticle (larosa023)";
 
 static bool RunKeySet() {
     wchar_t buf[1024];
@@ -114,7 +118,6 @@ static bool RunKeySet() {
     return RegGetValueW(HKEY_CURRENT_USER, kRunKey, L"Reticle", RRF_RT_REG_SZ, nullptr, buf, &size) == ERROR_SUCCESS;
 }
 
-static std::wstring Schtasks() { return KnownFolder(FOLDERID_System) + L"\\schtasks.exe"; }
 
 static bool TaskExists() {
     DWORD code = 1;
@@ -128,6 +131,62 @@ bool StartupEnabled() { return RunKeySet() || StartupIsAdmin(); }
 bool StartupIsAdmin() {
     if (s_taskCached < 0) RefreshStartupState();
     return s_taskCached == 1;
+}
+
+static std::wstring XmlEscape(const std::wstring& s);
+
+// A logon task that starts Reticle with highest privileges for this user: no UAC prompt at sign-in,
+// and Reticle can also start it on demand ("schtasks /Run") to hand over to an admin copy.
+static bool CreateAdminTask(const std::wstring& userSid) {
+    if (userSid.empty()) return false;
+    std::wstring xml =
+        L"<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n"
+        L"<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n"
+        L"  <RegistrationInfo><Description>Starts Reticle with admin rights at sign-in, for frame capture and CPU temperature.</Description></RegistrationInfo>\r\n"
+        L"  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>" + XmlEscape(userSid) + L"</UserId><Delay>PT5S</Delay></LogonTrigger></Triggers>\r\n"
+        L"  <Principals><Principal id=\"Author\"><UserId>" + XmlEscape(userSid) + L"</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>\r\n"
+        L"  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>"
+        L"<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority>"
+        L"<IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings></Settings>\r\n"
+        L"  <Actions Context=\"Author\"><Exec><Command>" + XmlEscape(ExePath()) + L"</Command><Arguments>--tray --from-task</Arguments></Exec></Actions>\r\n"
+        L"</Task>\r\n";
+    std::wstring path = DataDir() + L"\\startup-task.xml";
+    EnsureDir(DataDir());
+    std::string bytes("\xFF\xFE", 2);   // schtasks wants UTF-16 with a BOM
+    bytes.append((const char*)xml.data(), xml.size() * sizeof(wchar_t));
+    WriteFileAtomic(path, bytes);
+    DWORD code = 1;
+    RunAndWait(Schtasks(), std::wstring(L"/Create /F /TN \"") + kTask + L"\" /XML \"" + path + L"\"", 15000, &code, true);
+    DeleteFileW(path.c_str());
+    Log(L"admin startup task: %ls", code == 0 ? L"created" : L"failed");
+    return code == 0;
+}
+
+bool RunAdminTask() {
+    DWORD code = 1;
+    RunAndWait(Schtasks(), std::wstring(L"/Run /TN \"") + kTask + L"\"", 15000, &code, true);
+    return code == 0;
+}
+
+// The elevated side of SetupAdmin: allow frame capture for good and register the admin startup task.
+int HandleSetupAdmin(const wchar_t* sid) {
+    int a = HandleGrantPerfLog(sid);
+    bool t = CreateAdminTask(sid);
+    Log(L"setup-admin: perf log users %d, task %d", a, t ? 1 : 0);
+    return t ? 0 : (a == 0 ? 5 : 6);
+}
+
+bool SetupAdmin() {
+    std::wstring sid = UserSid();
+    if (sid.empty()) return false;
+    DWORD code = 1;
+    if (!RunElevated(L"--setup-admin " + sid, true, &code)) return false;   // declined
+    if (code == 0 || code == 5) {
+        DWORD one = 1;
+        RegSetKeyValueW(HKEY_CURRENT_USER, kGrantKey, L"PerfLogGranted", REG_DWORD, &one, sizeof(one));
+    }
+    RefreshStartupState();
+    return code == 0;
 }
 
 static std::wstring XmlEscape(const std::wstring& s) {
@@ -153,29 +212,7 @@ bool SetStartup(bool on, bool admin, std::wstring* error) {
     bool hasTask = TaskExists();
     if (on && admin && !hasTask) {
         if (!IsElevated()) { if (error) *error = L"Restart Reticle as administrator once to turn this on."; return false; }
-        std::wstring user = L"";
-        wchar_t name[256]; DWORD n = 256;
-        if (GetUserNameW(name, &n)) user = name;
-        std::wstring xml =
-            L"<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n"
-            L"<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n"
-            L"  <RegistrationInfo><Description>Starts Reticle with admin rights at sign-in, for frame capture and CPU temperature.</Description></RegistrationInfo>\r\n"
-            L"  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>" + XmlEscape(user) + L"</UserId><Delay>PT5S</Delay></LogonTrigger></Triggers>\r\n"
-            L"  <Principals><Principal id=\"Author\"><UserId>" + XmlEscape(user) + L"</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>\r\n"
-            L"  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>"
-            L"<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority>"
-            L"<IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings></Settings>\r\n"
-            L"  <Actions Context=\"Author\"><Exec><Command>" + XmlEscape(ExePath()) + L"</Command><Arguments>--tray</Arguments></Exec></Actions>\r\n"
-            L"</Task>\r\n";
-        std::wstring path = DataDir() + L"\\startup-task.xml";
-        // schtasks wants UTF-16 with a BOM
-        std::string bytes("\xFF\xFE", 2);
-        bytes.append((const char*)xml.data(), xml.size() * sizeof(wchar_t));
-        WriteFileAtomic(path, bytes);
-        DWORD code = 1;
-        RunAndWait(Schtasks(), std::wstring(L"/Create /F /TN \"") + kTask + L"\" /XML \"" + path + L"\"", 15000, &code, true);
-        DeleteFileW(path.c_str());
-        if (code != 0) { if (error) *error = L"Windows didn't accept the startup task."; return false; }
+        if (!CreateAdminTask(UserSid())) { if (error) *error = L"Windows didn't accept the startup task."; return false; }
     } else if ((!on || !admin) && hasTask) {
         DWORD code = 1;
         if (IsElevated()) RunAndWait(Schtasks(), std::wstring(L"/Delete /F /TN \"") + kTask + L"\"", 15000, &code, true);

@@ -32,7 +32,8 @@ struct Live {
 };
 void Snapshot(Live& out, size_t graphFrames);
 
-double PresentRate(DWORD pid);      // presents per second over the last ~second, any process (game detection)
+double PresentRate(DWORD pid);
+std::vector<std::pair<DWORD, double>> ActiveProcesses();   // every process presenting right now, with its rate      // presents per second over the last ~second, any process (game detection)
 
 // Benchmarks: every frame time of the target from Start to Stop.
 void BenchStart();

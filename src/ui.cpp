@@ -428,17 +428,15 @@ static void PermissionCard() {
     std::wstring why = pending
         ? L"Your account was added to Performance Log Users. Windows applies it at your next sign-in; until then, frame capture needs admin."
         : L"Reticle reads frame timing from Windows' own graphics events (ETW), the way PresentMon does, so it never touches the game. "
-          L"Windows only lets administrators and members of \"Performance Log Users\" read those events.";
+          L"Windows only lets administrators read them. One prompt sets Reticle to start with admin rights at sign-in (no more prompts after that).";
     g_c.Text(why, Format(12, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, true), D2D1::RectF(r.left + 48, r.top + 40, r.right - 16, r.top + 96), g_t.subtext);
     float x = r.left + 48;
-    if (!pending) {
-        Button(D2D1::RectF(x, r.bottom - 46, x + 260, r.bottom - 14), L"Allow permanently (one prompt)", 0xE7EF, Btn::Primary, K("grant"), [] {
-            if (sys::GrantPerfLogUsers()) { Toast(L"Done. Sign out and back in once, and frame capture works without admin."); ReadSystemState(); }
-            else Toast(L"Windows didn't make the change (the prompt was declined or failed).");
-            Invalidate();
-        });
-        x += 270;
-    }
+    Button(D2D1::RectF(x, r.bottom - 46, x + 230, r.bottom - 14), pending ? L"Use admin until then" : L"Allow (one prompt)", 0xE7EF, Btn::Primary, K("grant"), [] {
+        app::FixPermissions(true);
+        ReadSystemState();
+        Invalidate();
+    });
+    x += 240;
     Button(D2D1::RectF(x, r.bottom - 46, x + 210, r.bottom - 14), L"Restart as administrator", 0xE7EF, Btn::Secondary, K("elevate"), [] {
         ConfigFlush();
         if (sys::RestartElevated(L"")) app::Quit();
