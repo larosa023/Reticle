@@ -681,7 +681,7 @@ static void DrawOverlay() {
              {0x0E0E12, 0x000000, 0x1B2230, 0x24182A});
 
     // units
-    D2D1_RECT_F s4 = Section(L"UNITS AND BEHAVIOR", 64 * 3);
+    D2D1_RECT_F s4 = Section(L"UNITS AND BEHAVIOR", 64 * 4);
     RowLabel(s4.top, L"Temperature", L"");
     Segmented(s4.right - 18, s4.top + 16, {L"°C", L"°F"}, g_cfg.tempF ? 1 : 0, "tempunit", [](int i) { g_cfg.tempF = i == 1; ConfigSaveSoon(); app::OverlayChanged(); Invalidate(); });
     Divider(s4.top + 64);
@@ -690,6 +690,9 @@ static void DrawOverlay() {
     Divider(s4.top + 128);
     RowLabel(s4.top + 128, L"Show the overlay without frame data", L"When frame capture isn't allowed, still show CPU, GPU and the rest");
     Toggle(s4.right - 18, s4.top + 128 + 21, g_cfg.showWithoutFrames, K("noframes"), [] { g_cfg.showWithoutFrames = !g_cfg.showWithoutFrames; ConfigSaveSoon(); Invalidate(); });
+    Divider(s4.top + 192);
+    RowLabel(s4.top + 192, L"Turn the overlay on for newly found games", L"Off: new games are listed on the Games page and you pick which get the overlay");
+    Toggle(s4.right - 18, s4.top + 192 + 21, g_cfg.overlayNewGames, K("newgames"), [] { g_cfg.overlayNewGames = !g_cfg.overlayNewGames; ConfigSaveSoon(); Invalidate(); });
 
     g_c.Text(L"The overlay is a separate see-through window on top of the game. It works over borderless and windowed games; exclusive fullscreen hides it.",
              Format(12, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, true), D2D1::RectF(g_x.left, g_x.y - 10, g_x.right, g_x.y + 24), g_t.faint);
@@ -875,16 +878,69 @@ static void AddGameFromFile() {
     w.exe = Lower(PathName(file));
     GameProfile& p = EnsureGame(w.exe, games::FriendlyName(w), w.path);
     p.detect = Detect::Always;
+    p.overlay = true;
     ConfigSaveSoon();
-    Toast(p.name + L" added. Reticle will treat it as a game.");
+    Toast(p.name + L" added. The overlay shows whenever it's in front.");
+}
+
+// every visible app window, to pick from
+static void AddRunningApp(float x, float y) {
+    struct Item { std::wstring exe, name, path; };
+    std::vector<Item> items;
+    EnumWindows([](HWND h, LPARAM lp) -> BOOL {
+        auto* v = (std::vector<Item>*)lp;
+        if (!IsWindowVisible(h) || GetWindow(h, GW_OWNER) || (GetWindowLongPtrW(h, GWL_EXSTYLE) & WS_EX_TOOLWINDOW)) return TRUE;
+        games::Window w;
+        if (!games::Describe(h, w) && !(IsIconic(h))) return TRUE;
+        if (w.path.empty()) {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(h, &pid);
+            if (!pid || pid == GetCurrentProcessId()) return TRUE;
+            if (HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+                wchar_t buf[MAX_PATH * 2]; DWORD n = MAX_PATH * 2;
+                if (QueryFullProcessImageNameW(p, 0, buf, &n)) w.path.assign(buf, n);
+                CloseHandle(p);
+            }
+            if (w.path.empty()) return TRUE;
+            w.exe = Lower(PathName(w.path));
+            wchar_t t[256]; int n = GetWindowTextW(h, t, 256); w.title.assign(t, n > 0 ? n : 0);
+        }
+        if (w.exe == L"explorer.exe" || w.exe == L"applicationframehost.exe" || w.exe == L"textinputhost.exe") return TRUE;
+        for (auto& it : *v) if (it.exe == w.exe) return TRUE;
+        v->push_back({w.exe, games::FriendlyName(w), w.path});
+        return TRUE;
+    }, (LPARAM)&items);
+    HMENU m = CreatePopupMenu();
+    if (items.empty()) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"No app windows open");
+    for (size_t i = 0; i < items.size() && i < 40; ++i) {
+        bool have = FindGame(items[i].exe) && FindGame(items[i].exe)->detect != Detect::Never;
+        AppendMenuW(m, MF_STRING | (have ? MF_CHECKED | MF_GRAYED : 0), 100 + i, (items[i].name + L"   (" + items[i].exe + L")").c_str());
+    }
+    POINT pt{(LONG)(x * g_scale), (LONG)(y * g_scale)};
+    ClientToScreen(g_hwnd, &pt);
+    UINT cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_hwnd, nullptr);
+    DestroyMenu(m);
+    if (cmd < 100 || cmd - 100 >= items.size()) return;
+    const Item& it = items[cmd - 100];
+    GameProfile& p = EnsureGame(it.exe, it.name, it.path);
+    p.detect = Detect::Always;
+    p.overlay = true;
+    g_cfg.overlayOn = true;
+    ConfigSaveSoon();
+    PostMessageW(g_app.ctl, WM_RETICLE_FOREGROUND, 0, 0);
+    Toast(p.name + L" added. The overlay shows whenever it's in front.");
 }
 
 static void DrawGames() {
-    Title(L"Games", L"Games Reticle has found. Each one remembers its overlay, crosshair and preset.");
+    Title(L"Games", L"Everything Reticle thinks is a game shows up here. You pick which ones get the overlay and crosshair; each remembers its own preset.");
     std::vector<GameProfile*> list;
     for (auto& kv : g_cfg.games) list.push_back(&kv.second);
     std::sort(list.begin(), list.end(), [](GameProfile* a, GameProfile* b) { return a->lastSeen > b->lastSeen; });
-    ButtonR(g_x.right, g_x.y - 54, L"Add game…", 0xE710, Btn::Secondary, K("addgame"), AddGameFromFile);
+    {
+        float bx = ButtonR(g_x.right, g_x.y - 54, L"Add .exe…", icon::Folder, Btn::Subtle, K("addgame"), AddGameFromFile) - 8;
+        float ax = bx - ButtonWidth(L"Add a running app", 0xE710);
+        ButtonR(bx, g_x.y - 54, L"Add a running app", 0xE710, Btn::Secondary, K("addrunning"), [ax, this_y = g_x.y - 22] { AddRunningApp(ax, this_y); });
+    }
     if (list.empty()) {
         D2D1_RECT_F r = Section(L"", 96);
         g_c.Text(L"No games yet", Format(15, DWRITE_FONT_WEIGHT_SEMI_BOLD), D2D1::RectF(r.left + 20, r.top + 22, r.right - 20, r.top + 44), g_t.text);

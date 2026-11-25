@@ -82,6 +82,12 @@ jobs:
           if (-not (Get-Process Reticle -ErrorAction SilentlyContinue)) { throw "Reticle exited" }
           if (-not ($log -match 'game: .*testgame.exe')) { throw "Reticle didn't detect the game" }
           if (-not ($log -match 'frames: testgame.exe at')) { throw "Reticle detected the game but got no FPS" }
+          # new games start with the overlay off (you pick); the in-game shortcut turns it on
+          $sh0 = New-Object -ComObject WScript.Shell
+          $null = $sh0.AppActivate((Get-Process TestGame).Id)
+          Start-Sleep -Milliseconds 500
+          $sh0.SendKeys('%+o')
+          Start-Sleep -Seconds 3
           # a screenshot of the overlay over the game, kept as a build artifact
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds

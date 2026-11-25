@@ -20,9 +20,11 @@ void Shutdown();
 void Show(const RECT& ref, UINT dpi);
 void Hide();
 bool Visible();
+bool ToastActive();
 void Redraw();                        // re-render from g_app with the current style
 void SetStyle(const OverlayStyle& s); // the style to draw (the game's preset or the default)
-void Toast(const std::wstring& text); // a short line at the top of the panel
+void Toast(const std::wstring& text, int ms = 1600); // a short line at the top of the panel
+void SetHintOnly(bool on);            // draw only the toast/notes, no stats (the overlay is off for this app)
 void ShowResult(const bench::Run& run, const std::vector<float>& frameMs);   // 10-second summary card
 
 // move mode: the panel takes the mouse; dragging moves it and snaps to corners

@@ -166,7 +166,9 @@ static void Render() {
     RECT r; UINT dpi = 96;
     if (!games::ClientRect(g_app.game.hwnd, r, nullptr, &dpi)) return;
     bool capture = frames::GetStatus() == frames::Status::Running;
-    if (OverlayWanted() && (capture || g_cfg.showWithoutFrames)) overlay::Show(r, dpi);
+    bool want = OverlayWanted() && (capture || g_cfg.showWithoutFrames);
+    overlay::SetHintOnly(!want);
+    if (want || overlay::ToastActive()) overlay::Show(r, dpi);   // a note can show even where the overlay is off
     else overlay::Hide();
     if (CrosshairWanted()) overlay::ShowCrosshair(r, dpi);
     else overlay::HideCrosshair();
@@ -220,7 +222,10 @@ static void BecomeGame(const games::Window& w, const wchar_t* why) {
         g_app.gamePid = w.pid;
         g_app.sessionStart = GetTickCount64();
         s_framesLogged = s_noFramesLogged = false;
+        bool isNew = FindGame(w.exe) == nullptr;
         GameProfile& p = EnsureGame(w.exe, games::FriendlyName(w), w.path);
+        if (isNew && !p.overlay)
+            overlay::Toast(p.name + L" found · " + HotkeyText(g_cfg.hotkeys[HkToggle]) + L" shows the overlay here", 7000);
         g_app.gameName = p.name;
         Log(L"game: %ls (%ls, pid %lu, %ls)", p.name.c_str(), w.exe.c_str(), w.pid, why);
         UpdateTip();
@@ -440,6 +445,7 @@ static void OnHotkey(int id) {
             if (inGame) {
                 if (!g_cfg.overlayOn) { g_cfg.overlayOn = true; p->overlay = true; }
                 else p->overlay = !p->overlay;
+                overlay::Toast(p->overlay ? L"Overlay on for " + p->name : L"Overlay off for " + p->name);
             } else {
                 g_cfg.overlayOn = !g_cfg.overlayOn;
             }
@@ -625,7 +631,7 @@ static void CheckPermissions() {
 }
 
 // ---------------------------------------------------------------- tray menu
-enum : UINT { CMD_SETTINGS = 100, CMD_OVERLAY, CMD_CROSSHAIR, CMD_BENCH, CMD_MOVE, CMD_UPDATE, CMD_QUIT, CMD_INSTALL, CMD_NOTGAME };
+enum : UINT { CMD_SETTINGS = 100, CMD_OVERLAY, CMD_CROSSHAIR, CMD_BENCH, CMD_MOVE, CMD_UPDATE, CMD_QUIT, CMD_INSTALL, CMD_NOTGAME, CMD_GAMEOVERLAY };
 
 static void TrayMenu() {
     HMENU m = CreatePopupMenu();
@@ -633,6 +639,7 @@ static void TrayMenu() {
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING | (g_cfg.overlayOn ? MF_CHECKED : 0), CMD_OVERLAY, (L"Show overlay in games\t" + HotkeyText(g_cfg.hotkeys[HkToggle])).c_str());
     GameProfile* p = g_app.gamePid ? FindGame(g_app.game.exe) : nullptr;
+    if (p) AppendMenuW(m, MF_STRING | (p->overlay ? MF_CHECKED : 0), CMD_GAMEOVERLAY, (L"Overlay in " + p->name).c_str());
     AppendMenuW(m, MF_STRING | (p ? 0 : MF_GRAYED) | (p && p->crosshair ? MF_CHECKED : 0), CMD_CROSSHAIR,
                 (p ? L"Crosshair in " + p->name : std::wstring(L"Crosshair (start a game)")).c_str());
     AppendMenuW(m, MF_STRING | (g_app.gamePid ? 0 : MF_GRAYED), CMD_BENCH, g_app.benching ? L"Stop benchmark" : L"Start benchmark");
@@ -656,6 +663,9 @@ static void TrayMenu() {
         case CMD_UPDATE: CheckUpdates(true); OpenSettings(L"settings"); break;
         case CMD_INSTALL: TryInstall(true); break;
         case CMD_QUIT: Quit(); break;
+        case CMD_GAMEOVERLAY:
+            if (p) { p->overlay = !p->overlay; if (p->overlay) g_cfg.overlayOn = true; ConfigSaveSoon(); Render(); ui::Invalidate(); }
+            break;
         case CMD_NOTGAME:
             if (p) { p->detect = Detect::Never; ConfigSaveSoon(); EndSession(); ui::Invalidate(); }
             break;

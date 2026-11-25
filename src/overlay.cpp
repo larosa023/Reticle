@@ -73,6 +73,7 @@ static RECT s_ref{};
 static UINT s_dpi = 96;
 static bool s_visible = false, s_crossVisible = false;
 static std::wstring s_toast;
+static bool s_hintOnly = false;
 static ULONGLONG s_toastUntil = 0;
 static bool s_result = false;
 static ULONGLONG s_resultUntil = 0;
@@ -148,6 +149,7 @@ static std::vector<Row> BuildRows(bool compact) {
     }
     if (!s_toast.empty() && GetTickCount64() < s_toastUntil) add(RowBanner, L"", {{s_toast, Accent}});
 
+    if (s_hintOnly) return rows;
     std::wstring fps = !capture ? L"—" : L.valid ? Num(L.fps, 0) : L"0";
     if (st.layout == Layout::Minimal) {
         add(RowBig, L"", {{fps, Value}});
@@ -354,7 +356,7 @@ static void RenderPanel() {
         }
         float inner = (labelW > 0 ? labelW + gapX : 0) + valueW;
         for (auto& r : rows) if (r.kind == RowBanner) inner = std::max(inner, SegsWidth(r.segs, f.banner, f.banner));
-        inner = std::max(inner, (s_style.layout == Layout::Minimal ? 30.0f : 150.0f) * sc);
+        inner = std::max(inner, (s_style.layout == Layout::Minimal || s_hintOnly ? 30.0f : 150.0f) * sc);
         W = inner + pad * 2;
         H = pad * 2;
         for (auto& r : rows) H += r.kind == RowBig ? bigH : (r.kind == RowGraph || r.kind == RowResultGraph) ? graphH + f.ts * 0.4f : rowH;
@@ -646,6 +648,7 @@ void Hide() {
 }
 
 bool Visible() { return s_visible; }
+bool ToastActive() { return !s_toast.empty() && GetTickCount64() < s_toastUntil; }
 void Redraw() { RenderPanel(); }
 
 void SetStyle(const OverlayStyle& s) {
@@ -653,9 +656,14 @@ void SetStyle(const OverlayStyle& s) {
     s_style = s;
 }
 
-void Toast(const std::wstring& text) {
+void SetHintOnly(bool on) {
+    if (on != s_hintOnly) s_stickyW = 0;
+    s_hintOnly = on;
+}
+
+void Toast(const std::wstring& text, int ms) {
     s_toast = text;
-    s_toastUntil = GetTickCount64() + 1600;
+    s_toastUntil = GetTickCount64() + ms;
     RenderPanel();
 }
 

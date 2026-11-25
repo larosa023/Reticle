@@ -100,6 +100,7 @@ void ConfigLoad() {
     c.tempF = v.GetBool(L"tempF", c.tempF);
     c.clock24 = v.GetBool(L"clock24", c.clock24);
     c.showWithoutFrames = v.GetBool(L"showWithoutFrames", c.showWithoutFrames);
+    c.overlayNewGames = v.GetBool(L"overlayNewGames", c.overlayNewGames);
     if (const json::Value* x = v.Get(L"crosshair"); x && x->type == json::Value::Object) {
         CrosshairStyle& s = c.cross;
         s.shape = (CrossShape)Clamp<int>(x->GetNum(L"shape", (int)s.shape), 0, 4);
@@ -178,6 +179,7 @@ void ConfigSave() {
     v.Set(L"tempF", json::Value::Boolean(g_cfg.tempF));
     v.Set(L"clock24", json::Value::Boolean(g_cfg.clock24));
     v.Set(L"showWithoutFrames", json::Value::Boolean(g_cfg.showWithoutFrames));
+    v.Set(L"overlayNewGames", json::Value::Boolean(g_cfg.overlayNewGames));
     json::Value x = json::Value::MakeObject();
     const CrosshairStyle& s = g_cfg.cross;
     x.Set(L"shape", json::Value::Num((int)s.shape));
@@ -272,6 +274,7 @@ GameProfile& EnsureGame(const std::wstring& exe, const std::wstring& name, const
     p.name = name.empty() ? exe : name;
     p.path = path;
     p.crosshair = g_cfg.crosshairDefault;
+    p.overlay = g_cfg.overlayNewGames;
     p.style = g_cfg.style;
     auto& ref = g_cfg.games[key] = p;
     ConfigSaveSoon();

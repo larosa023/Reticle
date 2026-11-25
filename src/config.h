@@ -87,6 +87,7 @@ struct Config {
     bool tempF = false;
     bool clock24 = false;
     bool showWithoutFrames = true;         // show the overlay even if frame capture isn't available
+    bool overlayNewGames = false;          // newly found games get the overlay right away (off: you pick)
     // crosshair
     CrosshairStyle cross;
     bool crosshairDefault = false;         // new games get the crosshair on
